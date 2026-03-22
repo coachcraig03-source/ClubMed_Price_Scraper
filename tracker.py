@@ -4,64 +4,83 @@ import re
 from datetime import date
 from playwright.sync_api import sync_playwright
 
-RESORT_URL = "https://www.clubmed.us/r/miches-playa-esmeralda/y?start_date=2027-01-16&end_date=2027-01-23&adults=2&children=0"
-CSV_FILE = "miches_prices.csv"
+# --- Resort definitions ---
+RESORTS = {
+    "miches": {
+        "name": "Miches Playa Esmeralda",
+        "url": "https://www.clubmed.us/r/miches-playa-esmeralda/y"
+    },
+    "cancun": {
+        "name": "Cancun",
+        "url": "https://www.clubmed.us/r/cancun-yucatan/y"
+    },
+    "puntacana": {
+        "name": "Punta Cana",
+        "url": "https://www.clubmed.us/r/punta-cana/y"
+    }
+}
+
+START_DATE = "2027-01-16"
+END_DATE = "2027-01-23"
+ADULTS = 2
+CHILDREN = 0
 
 
-def extract_price():
+def build_url(base_url):
+    return (
+        f"{base_url}"
+        f"?start_date={START_DATE}"
+        f"&end_date={END_DATE}"
+        f"&adults={ADULTS}"
+        f"&children={CHILDREN}"
+    )
+
+
+def extract_price(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(RESORT_URL)
+        page.goto(url)
         page.wait_for_load_state("networkidle")
 
-        # Extract ALL text from the booking page
         full_text = page.inner_text("body")
-        print("DEBUG FULL PAGE TEXT EXTRACTED")
-
         browser.close()
 
-    # Extract ALL dollar amounts from the page
     matches = re.findall(r"\$[\d,]+", full_text)
 
     if len(matches) < 2:
-        raise Exception("ERROR: Could not find enough price values on the page.")
+        raise Exception("Could not find Best price on page.")
 
-    # Best price is ALWAYS the second dollar amount
     best_price = matches[1]
-    print("DEBUG BEST PRICE FOUND:", best_price)
-
-    # Convert to float
     price = float(best_price.replace("$", "").replace(",", ""))
     return price
 
 
-def append_to_csv(price):
+def append_to_csv(csv_file, price):
     today = date.today().isoformat()
 
-    # Create file if missing
-    if not os.path.exists(CSV_FILE):
-        with open(CSV_FILE, "w", newline="") as f:
+    if not os.path.exists(csv_file):
+        with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["date", "price"])
 
-    # Avoid duplicate entries for same day
-    with open(CSV_FILE, "r") as f:
-        lines = f.readlines()
-        if any(today in line for line in lines):
+    with open(csv_file, "r") as f:
+        if any(today in line for line in f.readlines()):
             return
 
-    # Append new row
-    with open(CSV_FILE, "a", newline="") as f:
+    with open(csv_file, "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([today, price])
 
 
-def run_tracker():
-    price = extract_price()
-    append_to_csv(price)
-    print(f"Logged {price} for {date.today()}")
+def run_all_resorts():
+    for key, info in RESORTS.items():
+        url = build_url(info["url"])
+        price = extract_price(url)
+        csv_file = f"{key}_prices.csv"
+        append_to_csv(csv_file, price)
+        print(f"Logged {price} for {info['name']}")
 
 
 if __name__ == "__main__":
-    run_tracker()
+    run_all_resorts()
