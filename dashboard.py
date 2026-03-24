@@ -3,28 +3,32 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import os
+from pathlib import Path
+
+BASE = Path(r"C:\Users\cbrow\SynologyDrive\clubmed")
+
 
 # --- Resort definitions ---
 RESORTS = {
     "miches": {
         "name": "Miches Playa Esmeralda",
-        "csv": "miches_prices.csv",
-        "color": "#1f77b4"  # blue
+        "csv": BASE / "miches_prices.csv",
+        "color": "#1f77b4"
     },
     "cancun": {
         "name": "Cancun",
-        "csv": "cancun_prices.csv",
-        "color": "#ff7f0e"  # orange
+        "csv": BASE / "cancun_prices.csv",
+        "color": "#ff7f0e"
     },
     "puntacana": {
         "name": "Punta Cana",
-        "csv": "puntacana_prices.csv",
-        "color": "#2ca02c"  # green
+        "csv": BASE / "puntacana_prices.csv",
+        "color": "#2ca02c"
     }
 }
 
-IMAGE_FILE = "dashboard.jpg"   # Your single photo
 
+IMAGE_FILE = "dashboard.jpg"   # Your single photo
 
 def load_csv(csv_file):
     dates = []
@@ -36,8 +40,49 @@ def load_csv(csv_file):
     with open(csv_file, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            dates.append(datetime.fromisoformat(row["date"]))
-            prices.append(float(row["price"]))
+            raw_date = row["date"].strip()
+
+            # Try ISO first (fast path)
+            try:
+                dt = datetime.fromisoformat(raw_date)
+            except ValueError:
+                # Try multiple common formats Excel might produce
+                parsed = None
+                for fmt in [
+                    "%m/%d/%Y",
+                    "%m/%d/%y",
+                    "%Y/%m/%d",
+                    "%Y-%m-%d",
+                    "%Y-%m-%d",
+                    "%m-%d-%Y",
+                    "%m-%d-%y",
+                    "%d-%b-%Y",
+                    "%d-%b-%y",
+                    "%b %d %Y",
+                    "%b %d, %Y",
+                    "%d %b %Y",
+                ]:
+                    try:
+                        parsed = datetime.strptime(raw_date, fmt)
+                        break
+                    except ValueError:
+                        continue
+
+                if parsed is None:
+                    print(f"[WARNING] Could not parse date: {raw_date}")
+                    continue
+
+                dt = parsed
+
+            # Parse price normally
+            try:
+                price = float(row["price"])
+            except:
+                print(f"[WARNING] Bad price value: {row['price']}")
+                continue
+
+            dates.append(dt)
+            prices.append(price)
 
     return dates, prices
 
@@ -80,7 +125,7 @@ def show_dashboard():
         })
 
     # --- Chart formatting ---
-    ax.set_title("Club Med – Best Price Trends", fontsize=18, fontweight="bold")
+    ax.set_title("Club Med – Best Price Trends", fontsize=22, fontweight="bold")
     ax.set_xlabel("Date")
     ax.set_ylabel("Price (USD)")
     ax.grid(True)
